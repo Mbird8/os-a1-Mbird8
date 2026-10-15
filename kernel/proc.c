@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "uproc.h"
 
 struct cpu cpus[NCPU];
 
@@ -124,6 +125,7 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  p->tracemask = 0;
 
   // Allocate a trapframe page.
   if ((p->trapframe = (struct trapframe *)kalloc()) == 0) {
@@ -168,6 +170,7 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->tracemask = 0;
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -274,6 +277,7 @@ kfork(void)
     return -1;
   }
   np->sz = p->sz;
+  np->tracemask = p->tracemask;
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
@@ -700,4 +704,51 @@ procdump(void)
     printk("%d %s %s", p->pid, state, p->name);
     printk("\n");
   }
+}
+
+uint64
+nproc(void)
+{
+  struct proc *p;
+  uint64 n = 0;
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->state != UNUSED)
+      n++;
+    release(&p->lock);
+  }
+  return n;
+}
+
+int
+getprocs(uint64 addr, int max)
+{
+  struct proc *p, *mp = myproc();
+  struct uproc up;
+  int n = 0;
+
+  for(p = proc; p < &proc[NPROC] && n < max; p++){
+    acquire(&wait_lock);              // wait_lock before p->lock
+    acquire(&p->lock);
+    if(p->state == UNUSED){
+      release(&p->lock);
+      release(&wait_lock);
+      continue;
+    }
+    memset(&up, 0, sizeof(up));       // no kernel stack garbage to user
+    up.pid = p->pid;
+    up.ppid = p->parent ? p->parent->pid : 0;
+    up.state = p->state;
+    up.sz = p->sz;
+    safestrcpy(up.name, p->name, sizeof(up.name));
+    release(&p->lock);
+    release(&wait_lock);
+
+    // no spinlocks held: copyout can fault and allocate
+    if(copyout(mp->pagetable, mp->sz, addr + n * sizeof(up),
+               (char *)&up, sizeof(up)) < 0)
+      return -1;
+    n++;
+  }
+  return n;
 }

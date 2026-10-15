@@ -82,6 +82,19 @@ fileclose(struct file *f)
   }
 }
 
+uint64
+nopenfile(void)
+{
+  struct file *f;
+  uint64 n = 0;
+  acquire(&ftable.lock);
+  for(f = ftable.file; f < ftable.file + NFILE; f++)
+    if(f->ref > 0)
+      n++;
+  release(&ftable.lock);
+  return n;
+}
+
 // Get metadata about file f.
 // addr is a user virtual address, pointing to a struct stat.
 int

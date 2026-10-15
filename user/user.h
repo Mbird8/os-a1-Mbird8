@@ -2,8 +2,8 @@
 
 typedef unsigned int uint;
 struct stat;
-//struct sysinfo;
-//struct uproc;
+struct sysinfo;
+struct uproc;
 
 // system calls
 int fork(void);
@@ -28,9 +28,9 @@ char *sys_sbrk(int, int);
 int pause(int);
 int uptime(void);
 int sync(void);
-//int trace(int);
-//int sysinfo(struct sysinfo *);
-//int getprocs(struct uproc *, int);
+int trace(int);
+int sysinfo(struct sysinfo *);
+int getprocs(struct uproc *, int);
 
 // ulib.c
 int stat(const char *, struct stat *);
